@@ -14,6 +14,7 @@ export function openDb(): Database.Database {
       agent TEXT NOT NULL,
       cwd TEXT,
       file_path TEXT NOT NULL,
+      display_path TEXT NOT NULL DEFAULT '',
       started_at TEXT,
       ended_at TEXT,
       indexed_mtime_ms INTEGER NOT NULL,
@@ -43,6 +44,12 @@ export function openDb(): Database.Database {
       INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
     END;
   `);
+
+  // Migration for indexes created before display_path existed.
+  const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === 'display_path')) {
+    db.exec("ALTER TABLE sessions ADD COLUMN display_path TEXT NOT NULL DEFAULT ''");
+  }
 
   return db;
 }

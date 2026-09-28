@@ -24,11 +24,12 @@ export async function runFullScan(db: Database.Database, adapters: AgentAdapter[
     'SELECT indexed_mtime_ms FROM sessions WHERE agent = ? AND id = ?'
   );
   const upsertSession = db.prepare(`
-    INSERT INTO sessions (id, agent, cwd, file_path, started_at, ended_at, indexed_mtime_ms)
-    VALUES (@id, @agent, @cwd, @filePath, @startedAt, @endedAt, @mtimeMs)
+    INSERT INTO sessions (id, agent, cwd, file_path, display_path, started_at, ended_at, indexed_mtime_ms)
+    VALUES (@id, @agent, @cwd, @filePath, @displayPath, @startedAt, @endedAt, @mtimeMs)
     ON CONFLICT(agent, id) DO UPDATE SET
       cwd = excluded.cwd,
       file_path = excluded.file_path,
+      display_path = excluded.display_path,
       started_at = excluded.started_at,
       ended_at = excluded.ended_at,
       indexed_mtime_ms = excluded.indexed_mtime_ms
@@ -66,6 +67,7 @@ export async function runFullScan(db: Database.Database, adapters: AgentAdapter[
           agent: session.agent,
           cwd: session.cwd,
           filePath: session.filePath,
+          displayPath: session.displayPath,
           startedAt: session.startedAt,
           endedAt: session.endedAt,
           mtimeMs,

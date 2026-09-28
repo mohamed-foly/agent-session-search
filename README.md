@@ -51,6 +51,8 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+The container runs as a non-root user matching your host UID/GID (defaults to 1000:1000, a typical single-user Linux desktop's first account), so the SQLite index it writes into the bind-mounted `./data` folder comes out owned by you, not root. If your user has a different UID/GID, set `APP_UID`/`APP_GID` (e.g. in a `.env` file in this directory, picked up automatically by `docker compose`) before building.
+
 Open the URL printed on startup (default `http://localhost:4173`).
 
 ## Reindexing

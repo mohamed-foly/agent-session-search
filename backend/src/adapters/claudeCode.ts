@@ -1,7 +1,7 @@
 import fs from 'fs';
 import readline from 'readline';
 import path from 'path';
-import { config, renderTemplate } from '../config';
+import { config, renderTemplate, toDisplayPath } from '../config';
 import { AgentAdapter, SessionMessage, SessionMeta } from './types';
 import { extractText } from './textExtract';
 
@@ -62,7 +62,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       }
     }
 
-    return { sessionId, agent: this.id, cwd, filePath, startedAt, endedAt };
+    const displayPath = toDisplayPath(filePath, config.claudeCode.sessionsDir, config.claudeCode.hostSessionsDir);
+    return { sessionId, agent: this.id, cwd, filePath, displayPath, startedAt, endedAt };
   }
 
   async *readMessages(session: SessionMeta): AsyncIterable<SessionMessage> {

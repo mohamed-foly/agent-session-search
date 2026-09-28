@@ -1,7 +1,7 @@
 import fs from 'fs';
 import readline from 'readline';
 import path from 'path';
-import { config, renderTemplate } from '../config';
+import { config, renderTemplate, toDisplayPath } from '../config';
 import { AgentAdapter, SessionMessage, SessionMeta } from './types';
 import { extractText } from './textExtract';
 
@@ -80,7 +80,8 @@ export class CodexAdapter implements AgentAdapter {
       sessionId = match ? match[1] : path.basename(filePath, '.jsonl');
     }
 
-    return { sessionId, agent: this.id, cwd, filePath, startedAt, endedAt };
+    const displayPath = toDisplayPath(filePath, config.codex.sessionsDir, config.codex.hostSessionsDir);
+    return { sessionId, agent: this.id, cwd, filePath, displayPath, startedAt, endedAt };
   }
 
   async *readMessages(session: SessionMeta): AsyncIterable<SessionMessage> {

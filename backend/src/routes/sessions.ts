@@ -17,6 +17,7 @@ export function sessionsRouter(db: Database.Database, adapters: AgentAdapter[]):
           agent: string;
           cwd: string | null;
           file_path: string;
+          display_path: string;
           started_at: string | null;
           ended_at: string | null;
         }
@@ -40,6 +41,7 @@ export function sessionsRouter(db: Database.Database, adapters: AgentAdapter[]):
           agent: session.agent,
           cwd: session.cwd,
           filePath: session.file_path,
+          displayPath: session.display_path,
           startedAt: session.started_at,
           endedAt: session.ended_at,
         })
@@ -49,7 +51,7 @@ export function sessionsRouter(db: Database.Database, adapters: AgentAdapter[]):
       agent: session.agent,
       sessionId: session.id,
       cwd: session.cwd,
-      filePath: session.file_path,
+      filePath: session.display_path,
       startedAt: session.started_at,
       endedAt: session.ended_at,
       resumeCommand,

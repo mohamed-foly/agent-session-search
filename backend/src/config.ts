@@ -30,15 +30,37 @@ export const config = {
   // files, so the whole set of "what's configurable" is visible in one place.
   claudeCode: {
     sessionsDir: expandHome(process.env.CLAUDE_CODE_SESSIONS_DIR ?? '~/.claude/projects'),
+    // Only needed when sessionsDir is a container-internal mount path (Docker):
+    // the real host path, used purely for display in search results.
+    hostSessionsDir: process.env.CLAUDE_CODE_HOST_SESSIONS_DIR
+      ? expandHome(process.env.CLAUDE_CODE_HOST_SESSIONS_DIR)
+      : null,
     resumeCommandTemplate:
       process.env.CLAUDE_CODE_RESUME_COMMAND ?? 'cd {cwd} && claude --resume {sessionId}',
   },
   codex: {
     sessionsDir: expandHome(process.env.CODEX_SESSIONS_DIR ?? '~/.codex/sessions'),
+    hostSessionsDir: process.env.CODEX_HOST_SESSIONS_DIR
+      ? expandHome(process.env.CODEX_HOST_SESSIONS_DIR)
+      : null,
     resumeCommandTemplate:
       process.env.CODEX_RESUME_COMMAND ?? 'cd {cwd} && codex resume {sessionId}',
   },
 };
+
+/**
+ * Maps a path under `sessionsDir` back to the equivalent path under
+ * `hostSessionsDir`, for display purposes only. No-op (identity) unless
+ * hostSessionsDir is configured (i.e. unless running in Docker).
+ */
+export function toDisplayPath(
+  filePath: string,
+  sessionsDir: string,
+  hostSessionsDir: string | null
+): string {
+  if (!hostSessionsDir || !filePath.startsWith(sessionsDir)) return filePath;
+  return hostSessionsDir + filePath.slice(sessionsDir.length);
+}
 
 export function renderTemplate(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '');

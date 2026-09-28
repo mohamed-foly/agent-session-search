@@ -5,7 +5,14 @@
 
 services:
   agent-session-search:
-    build: .
+    build:
+      context: .
+      args:
+        # Match your host user so bind-mounted writes (the SQLite index)
+        # come out owned by you, not root. Defaults already match a typical
+        # single-user Linux desktop's first account.
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     container_name: agent-session-search
     restart: unless-stopped
     ports:
@@ -17,6 +24,10 @@ services:
       ENABLED_AGENTS: ${ENABLED_AGENTS:-claude-code,codex}
       CLAUDE_CODE_SESSIONS_DIR: /sessions/claude-code
       CODEX_SESSIONS_DIR: /sessions/codex
+      # The real host paths behind the mounts below, so search results show
+      # paths you can actually open on the host instead of container-internal ones.
+      CLAUDE_CODE_HOST_SESSIONS_DIR: ${CLAUDE_CODE_HOST_DIR:-${HOME}/.claude/projects}
+      CODEX_HOST_SESSIONS_DIR: ${CODEX_HOST_DIR:-${HOME}/.codex/sessions}
       CLAUDE_CODE_RESUME_COMMAND: ${CLAUDE_CODE_RESUME_COMMAND:-cd {cwd} && claude --resume {sessionId}}
       CODEX_RESUME_COMMAND: ${CODEX_RESUME_COMMAND:-cd {cwd} && codex resume {sessionId}}
     volumes:

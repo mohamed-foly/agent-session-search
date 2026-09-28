@@ -75,6 +75,7 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
           s.id AS sessionId,
           s.cwd AS cwd,
           s.file_path AS filePath,
+          s.display_path AS displayPath,
           s.started_at AS startedAt,
           s.ended_at AS endedAt,
           snippet(messages_fts, 0, '»', '«', '…', 12) AS snippet
@@ -91,6 +92,7 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
       sessionId: string;
       cwd: string | null;
       filePath: string;
+      displayPath: string;
       startedAt: string | null;
       endedAt: string | null;
       snippet: string;
@@ -112,6 +114,7 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
             agent: row.agent,
             cwd: row.cwd,
             filePath: row.filePath,
+            displayPath: row.displayPath,
             startedAt: row.startedAt,
             endedAt: row.endedAt,
           })
@@ -121,7 +124,7 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
         agent: row.agent,
         sessionId: row.sessionId,
         cwd: row.cwd,
-        filePath: row.filePath,
+        filePath: row.displayPath,
         startedAt: row.startedAt,
         endedAt: row.endedAt,
         matchCount: 1,

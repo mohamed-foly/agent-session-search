@@ -11,8 +11,15 @@ export interface SessionMeta {
   agent: string;
   /** Absolute path to the working directory the session ran in, if known. */
   cwd: string | null;
-  /** Absolute path to the on-disk session file, for display/debugging. */
+  /** Absolute path this process actually reads from (may be a container-internal mount path). */
   filePath: string;
+  /**
+   * Absolute path to show the user (e.g. in search results). Equal to
+   * filePath when running directly on the host; differs from it when
+   * running in Docker, where filePath is the container-internal mount
+   * path but the user needs the real host path to make sense of it.
+   */
+  displayPath: string;
   /** ISO timestamp of the first recorded event, if known. */
   startedAt: string | null;
   /** ISO timestamp of the last recorded event, if known. */
