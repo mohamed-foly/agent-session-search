@@ -1,8 +1,12 @@
 import fs from 'fs';
 import { Router } from 'express';
 import Database from 'better-sqlite3';
-import { AgentAdapter } from '../adapters/types';
+import { AgentAdapter, MessageKind } from '../adapters/types';
 import { fillArgsSlot } from '../config';
+import { queryTerms, toFtsQuery } from '../fts';
+import { presentRange, presentRow } from '../present';
+import { cleanFtsSnippet, makeSnippet } from '../snippet';
+import { pairToolResults } from '../toolPairing';
 import { SessionRow, sessionMetaFromRow } from '../rebuild';
 
 export interface SearchResult {
@@ -14,6 +18,15 @@ export interface SearchResult {
   endedAt: string | null;
   matchCount: number;
   bestSnippet: string;
+  /** seq of the message `bestSnippet` came from; anchors the conversation viewer. */
+  bestSeq: number;
+  /** What the best-matching message is, so the UI can label it. */
+  bestKind: MessageKind;
+  /** The stored role/record type of that message (e.g. "subagent:assistant"). */
+  bestRole?: string;
+  /** For a tool call or result: the tool's name (a result's comes from the call it answers). */
+  bestToolName?: string;
+  bestToolCallId?: string;
   /** Whether the transcript file exists, i.e. whether resuming will work. */
   available: boolean;
   rebuiltAt: string | null;
@@ -21,17 +34,6 @@ export interface SearchResult {
   resumeTemplate: string | null;
   /** Resume command with the server's default args (from .env) filled in. */
   resumeCommand: string | null;
-}
-
-/** Turns free-text user input into an FTS5 query, escaping quotes so odd
- * input (paths, punctuation) can't break the MATCH syntax. */
-function toFtsQuery(raw: string): string {
-  const terms = raw
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((term) => `"${term.replace(/"/g, '""')}"`);
-  return terms.join(' ');
 }
 
 export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): Router {
@@ -82,6 +84,7 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
         SELECT
           s.id, s.agent, s.cwd, s.file_path, s.display_path,
           s.started_at, s.ended_at, s.rebuilt_at,
+          m.seq AS seq,
           snippet(messages_fts, 0, '»', '«', '…', 12) AS snippet
         FROM messages_fts
         JOIN messages m ON m.rowid = messages_fts.rowid
@@ -91,7 +94,7 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
         LIMIT @maxRawMatches
         `
       )
-      .all({ ...params, maxRawMatches: MAX_RAW_MATCHES }) as Array<SessionRow & { snippet: string }>;
+      .all({ ...params, maxRawMatches: MAX_RAW_MATCHES }) as Array<SessionRow & { snippet: string; seq: number }>;
 
     const bySession = new Map<string, SearchResult>();
     for (const row of rawRows) {
@@ -114,6 +117,8 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
         endedAt: row.ended_at,
         matchCount: 1,
         bestSnippet: row.snippet,
+        bestSeq: row.seq,
+        bestKind: 'meta',
         available: fs.existsSync(row.file_path),
         rebuiltAt: row.rebuilt_at,
         resumeTemplate,
@@ -124,6 +129,27 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
     const results = Array.from(bySession.values())
       .sort((a, b) => b.matchCount - a.matchCount || (b.endedAt ?? '').localeCompare(a.endedAt ?? ''))
       .slice(0, limit);
+
+    // Describe each result's best message: what it is, which tool it belongs to, and an
+    // excerpt cut from the cleaned text (no tool ids or block-type tokens up front).
+    const terms = queryTerms(q);
+    const getRow = db.prepare('SELECT seq, role, timestamp, text FROM messages WHERE session_agent = ? AND session_id = ? AND seq = ?');
+    for (const r of results) {
+      const stored = getRow.get(r.agent, r.sessionId, r.bestSeq) as
+        | { seq: number; role: string | null; timestamp: string | null; text: string }
+        | undefined;
+      if (!stored) continue;
+      const adapter = adapterById.get(r.agent);
+      const row = presentRow(adapter, stored);
+      if (row.kind === 'tool_result') {
+        pairToolResults([row], presentRange(db, adapter, r.agent, r.sessionId, row.seq - 40, row.seq));
+      }
+      r.bestKind = row.kind;
+      if (row.role) r.bestRole = row.role;
+      if (row.toolName) r.bestToolName = row.toolName;
+      if (row.toolCallId) r.bestToolCallId = row.toolCallId;
+      r.bestSnippet = makeSnippet(row.text, terms) ?? cleanFtsSnippet(r.bestSnippet);
+    }
 
     res.json({ results });
   });

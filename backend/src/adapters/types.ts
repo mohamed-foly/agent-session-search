@@ -39,6 +39,22 @@ export interface IndexedMessage {
   text: string;
 }
 
+/** What a message is, for display in the conversation viewer. */
+export type MessageKind = 'user' | 'assistant' | 'tool_call' | 'tool_result' | 'thinking' | 'meta';
+
+export interface PresentedMessage {
+  kind: MessageKind;
+  /** Display text with the flattening's block-type prefixes stripped. */
+  text: string;
+  /** Tool name, for tool_call. */
+  toolName?: string;
+  /**
+   * The agent's id for a tool call, on a tool_call and (where the agent records it)
+   * on its tool_result, so the two can be matched. Opaque; shown only as a hint.
+   */
+  toolCallId?: string;
+}
+
 export interface RebuiltTranscript {
   /** Full file contents, ready to write to SessionMeta.filePath. */
   content: string;
@@ -74,6 +90,13 @@ export interface AgentAdapter {
    * literal `{args}` slot for extra CLI flags (see renderResumeTemplate).
    */
   buildResumeTemplate(session: SessionMeta): string;
+
+  /**
+   * Optional: classify an indexed message and strip the flattening's prefixes
+   * (see textExtract) for the conversation viewer. Adapters that omit it get
+   * the generic fallback in present.ts.
+   */
+  presentMessage?(message: IndexedMessage): PresentedMessage;
 
   /**
    * Optional: reconstruct a resumable session file from indexed messages,

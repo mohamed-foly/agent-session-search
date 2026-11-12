@@ -2,9 +2,10 @@ import fs from 'fs';
 import readline from 'readline';
 import path from 'path';
 import { config, renderResumeTemplate, toDisplayPath } from '../config';
-import { AgentAdapter, IndexedMessage, RebuiltTranscript, SessionMessage, SessionMeta } from './types';
+import { AgentAdapter, IndexedMessage, PresentedMessage, RebuiltTranscript, SessionMessage, SessionMeta } from './types';
 import { extractText } from './textExtract';
 import { REBUILT_LINE_FLAG, buildClaudeCodeTranscript } from './claudeCodeRebuild';
+import { presentClaudeCodeMessage } from './claudeCodePresent';
 
 /**
  * Claude Code stores one directory per working-directory under
@@ -105,6 +106,10 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       sessionId: session.sessionId,
       cwd: session.cwd ?? '.',
     });
+  }
+
+  presentMessage(message: IndexedMessage): PresentedMessage {
+    return presentClaudeCodeMessage(message);
   }
 
   buildRebuiltTranscript(session: SessionMeta, messages: IndexedMessage[]): RebuiltTranscript {

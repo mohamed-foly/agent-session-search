@@ -41,7 +41,7 @@ function clip(text: string, max: number): string {
 }
 
 /** Returns the tool output if this user-role line is a tool result, else null. */
-function toolResultBody(text: string): string | null {
+export function toolResultBody(text: string): string | null {
   let body: string | null = null;
   if (text.startsWith('toolu_')) {
     const marker = '\ntool_result\n';
@@ -56,7 +56,7 @@ function toolResultBody(text: string): string | null {
 }
 
 /** User-role lines the CLI injects (not typed by the user). */
-function isInjectedUserText(text: string): boolean {
+export function isInjectedUserText(text: string): boolean {
   return (
     text.startsWith('<local-command') ||
     text.startsWith('<command-') ||

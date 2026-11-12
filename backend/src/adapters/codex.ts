@@ -2,7 +2,8 @@ import fs from 'fs';
 import readline from 'readline';
 import path from 'path';
 import { config, renderResumeTemplate, toDisplayPath } from '../config';
-import { AgentAdapter, SessionMessage, SessionMeta } from './types';
+import { AgentAdapter, IndexedMessage, PresentedMessage, SessionMessage, SessionMeta } from './types';
+import { presentCodexMessage } from './codexPresent';
 import { extractText } from './textExtract';
 
 /**
@@ -122,5 +123,9 @@ export class CodexAdapter implements AgentAdapter {
       sessionId: session.sessionId,
       cwd: session.cwd ?? '.',
     });
+  }
+
+  presentMessage(message: IndexedMessage): PresentedMessage {
+    return presentCodexMessage(message);
   }
 }
