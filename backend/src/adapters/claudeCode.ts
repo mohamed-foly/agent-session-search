@@ -16,6 +16,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   readonly id = 'claude-code';
   readonly label = 'Claude Code';
   readonly sessionsDir = config.claudeCode.sessionsDir;
+  readonly hostSessionsDir = config.claudeCode.hostSessionsDir;
   readonly resumeArgs = config.claudeCode.resumeArgs;
 
   async isAvailable(): Promise<boolean> {

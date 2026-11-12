@@ -24,6 +24,12 @@ export interface SessionMeta {
   startedAt: string | null;
   /** ISO timestamp of the last recorded event, if known. */
   endedAt: string | null;
+  /**
+   * Other files that belong to this same session (e.g. Codex subagent rollouts, which
+   * carry the parent's session id). readMessages() reads them too, and the indexer
+   * treats the session as changed when any of them does.
+   */
+  relatedFiles?: string[];
 }
 
 export interface SessionMessage {
@@ -69,6 +75,11 @@ export interface AgentAdapter {
   readonly label: string;
   /** Root this adapter reads session files from (a rebuild may only write below it). */
   readonly sessionsDir: string;
+  /**
+   * The real host path behind sessionsDir when this process sees it through a mount
+   * (Docker); null when sessionsDir already is the real path. Display only.
+   */
+  readonly hostSessionsDir: string | null;
   /** Default extra CLI flags for the resume command's {args} slot (from .env). */
   readonly resumeArgs: string;
 

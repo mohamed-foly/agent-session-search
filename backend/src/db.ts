@@ -75,6 +75,10 @@ export function openDb(): Database.Database {
   if (!columns.some((c) => c.name === 'display_path')) {
     db.exec("ALTER TABLE sessions ADD COLUMN display_path TEXT NOT NULL DEFAULT ''");
   }
+  if (!columns.some((c) => c.name === 'rel_path')) {
+    // Path under the agent's sessions root: the same in every environment (see paths.ts).
+    db.exec('ALTER TABLE sessions ADD COLUMN rel_path TEXT');
+  }
   if (!columns.some((c) => c.name === 'rebuilt_at')) {
     db.exec('ALTER TABLE sessions ADD COLUMN rebuilt_at TEXT');
   }

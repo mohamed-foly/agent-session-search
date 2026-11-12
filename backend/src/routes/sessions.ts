@@ -3,6 +3,7 @@ import { Router } from 'express';
 import Database from 'better-sqlite3';
 import { AgentAdapter, MessageKind } from '../adapters/types';
 import { toFtsQuery } from '../fts';
+import { resolveSessionPaths } from '../paths';
 import { CALL_LOOKBACK_ROWS, presentRange, presentRow } from '../present';
 import { pairToolResults } from '../toolPairing';
 import { fillArgsSlot } from '../config';
@@ -62,16 +63,17 @@ export function sessionsRouter(db: Database.Database, adapters: AgentAdapter[]):
             .all(agent, id);
 
     const adapter = adapterById.get(agent);
-    const resumeTemplate = adapter ? adapter.buildResumeTemplate(sessionMetaFromRow(session)) : null;
+    const paths = resolveSessionPaths(adapter, session);
+    const resumeTemplate = adapter ? adapter.buildResumeTemplate(sessionMetaFromRow(session, adapter)) : null;
 
     res.json({
       agent: session.agent,
       sessionId: session.id,
       cwd: session.cwd,
-      filePath: session.display_path,
+      filePath: paths.displayPath,
       startedAt: session.started_at,
       endedAt: session.ended_at,
-      available: fs.existsSync(session.file_path),
+      available: fs.existsSync(paths.filePath),
       rebuiltAt: session.rebuilt_at,
       resumeTemplate,
       resumeCommand: adapter && resumeTemplate ? fillArgsSlot(resumeTemplate, adapter.resumeArgs) : null,

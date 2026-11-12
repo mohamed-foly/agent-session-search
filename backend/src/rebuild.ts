@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { AgentAdapter, IndexedMessage, RebuiltTranscript, SessionMeta } from './adapters/types';
+import { resolveSessionPaths } from './paths';
 
 /** A `sessions` table row. */
 export interface SessionRow {
@@ -10,18 +11,21 @@ export interface SessionRow {
   cwd: string | null;
   file_path: string;
   display_path: string;
+  rel_path: string | null;
   started_at: string | null;
   ended_at: string | null;
   rebuilt_at: string | null;
 }
 
-export function sessionMetaFromRow(row: SessionRow): SessionMeta {
+/** A session's metadata, with its paths resolved for the environment this process runs in. */
+export function sessionMetaFromRow(row: SessionRow, adapter?: AgentAdapter): SessionMeta {
+  const { filePath, displayPath } = resolveSessionPaths(adapter, row);
   return {
     sessionId: row.id,
     agent: row.agent,
     cwd: row.cwd,
-    filePath: row.file_path,
-    displayPath: row.display_path,
+    filePath,
+    displayPath,
     startedAt: row.started_at,
     endedAt: row.ended_at,
   };
@@ -82,6 +86,8 @@ function evaluate(
   row: SessionRow
 ): { check: RebuildCheck; transcript: RebuiltTranscript | null } {
   const reasons: string[] = [];
+  // Resolved for this environment, so a session indexed under Docker can be rebuilt from the host and vice versa.
+  const { filePath } = resolveSessionPaths(adapter, row);
 
   if (!adapter.buildRebuiltTranscript) {
     return {
@@ -89,12 +95,12 @@ function evaluate(
       transcript: null,
     };
   }
-  if (fs.existsSync(row.file_path)) {
+  if (fs.existsSync(filePath)) {
     reasons.push('The transcript file still exists, so the session is resumable as-is.');
   }
-  if (!isInside(row.file_path, adapter.sessionsDir)) {
+  if (!isInside(filePath, adapter.sessionsDir)) {
     reasons.push(`The session's file path is outside ${adapter.label}'s sessions directory.`);
-  } else if (!isWritable(nearestExistingDir(path.dirname(row.file_path)))) {
+  } else if (!isWritable(nearestExistingDir(path.dirname(filePath)))) {
     reasons.push(
       `The sessions directory is not writable by this server. In Docker, set ` +
         `CLAUDE_CODE_SESSIONS_MOUNT_MODE=rw and recreate the container.`
@@ -105,7 +111,7 @@ function evaluate(
   }
 
   const messages = loadSourceMessages(db, row.agent, row.id);
-  const transcript = adapter.buildRebuiltTranscript(sessionMetaFromRow(row), messages);
+  const transcript = adapter.buildRebuiltTranscript(sessionMetaFromRow(row, adapter), messages);
   if (transcript.userTurns < 1 || transcript.assistantTurns < 1) {
     reasons.push('The index holds no complete exchange (at least one user prompt and one assistant reply).');
   }
@@ -156,16 +162,17 @@ export function performRebuild(
     ).run(row.agent, row.id);
   })();
 
-  fs.mkdirSync(path.dirname(row.file_path), { recursive: true, mode: 0o700 });
+  const { filePath } = resolveSessionPaths(adapter, row);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
   // 'wx' fails if the file appeared since the check — never overwrite a real transcript.
-  fs.writeFileSync(row.file_path, transcript.content, { flag: 'wx', mode: 0o600 });
+  fs.writeFileSync(filePath, transcript.content, { flag: 'wx', mode: 0o600 });
 
   const rebuiltAt = new Date().toISOString();
   // Pin the indexed mtime to the new file: nothing new to index until the
   // session is resumed and appended to.
   db.prepare('UPDATE sessions SET rebuilt_at = ?, indexed_mtime_ms = ? WHERE agent = ? AND id = ?').run(
     rebuiltAt,
-    fs.statSync(row.file_path).mtimeMs,
+    fs.statSync(filePath).mtimeMs,
     row.agent,
     row.id
   );

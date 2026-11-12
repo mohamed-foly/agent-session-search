@@ -1,6 +1,7 @@
 import fs from 'fs';
 import Database from 'better-sqlite3';
 import { AgentAdapter, SessionMessage } from './adapters/types';
+import { relPathUnder } from './paths';
 
 export interface IndexStats {
   agentsScanned: number;
@@ -36,16 +37,19 @@ async function scan(db: Database.Database, adapters: AgentAdapter[]): Promise<In
   let sessionsSeen = 0;
   let sessionsReindexed = 0;
 
-  const getIndexedMtime = db.prepare(
-    'SELECT indexed_mtime_ms FROM sessions WHERE agent = ? AND id = ?'
-  );
+  const getIndexedMtime = db.prepare('SELECT indexed_mtime_ms, rel_path FROM sessions WHERE agent = ? AND id = ?');
+  // What identifies a transcript across environments is its path under the sessions root.
+  // The absolute file_path/display_path columns only record what the last scan saw; nothing
+  // trusts them (see paths.ts), so a Docker/host switch needs no refresh and no re-index.
+  const updateRelPath = db.prepare('UPDATE sessions SET rel_path = ? WHERE agent = ? AND id = ?');
   const upsertSession = db.prepare(`
-    INSERT INTO sessions (id, agent, cwd, file_path, display_path, started_at, ended_at, indexed_mtime_ms)
-    VALUES (@id, @agent, @cwd, @filePath, @displayPath, @startedAt, @endedAt, @mtimeMs)
+    INSERT INTO sessions (id, agent, cwd, file_path, display_path, rel_path, started_at, ended_at, indexed_mtime_ms)
+    VALUES (@id, @agent, @cwd, @filePath, @displayPath, @relPath, @startedAt, @endedAt, @mtimeMs)
     ON CONFLICT(agent, id) DO UPDATE SET
       cwd = excluded.cwd,
       file_path = excluded.file_path,
       display_path = excluded.display_path,
+      rel_path = excluded.rel_path,
       started_at = excluded.started_at,
       ended_at = excluded.ended_at,
       indexed_mtime_ms = excluded.indexed_mtime_ms
@@ -71,12 +75,23 @@ async function scan(db: Database.Database, adapters: AgentAdapter[]): Promise<In
       } catch {
         continue; // file disappeared mid-scan
       }
+      // A session made of several files is as new as its newest one.
+      for (const related of session.relatedFiles ?? []) {
+        try {
+          mtimeMs = Math.max(mtimeMs, fs.statSync(related).mtimeMs);
+        } catch {
+          // a related file that vanished just stops contributing
+        }
+      }
 
+      const relPath = relPathUnder(adapter.sessionsDir, session.filePath);
       const row = getIndexedMtime.get(session.agent, session.sessionId) as
-        | { indexed_mtime_ms: number }
+        | { indexed_mtime_ms: number; rel_path: string | null }
         | undefined;
       if (row && row.indexed_mtime_ms === mtimeMs) {
-        continue; // unchanged since last index
+        // Unchanged since last index: messages are not touched. Only record the relative path if it's missing or moved.
+        if (relPath && row.rel_path !== relPath) updateRelPath.run(relPath, session.agent, session.sessionId);
+        continue;
       }
 
       // Read the whole session BEFORE touching the index. If reading fails
@@ -101,6 +116,7 @@ async function scan(db: Database.Database, adapters: AgentAdapter[]): Promise<In
           cwd: session.cwd,
           filePath: session.filePath,
           displayPath: session.displayPath,
+          relPath,
           startedAt: session.startedAt,
           endedAt: session.endedAt,
           mtimeMs,

@@ -7,6 +7,7 @@ import { queryTerms, toFtsQuery } from '../fts';
 import { presentRange, presentRow } from '../present';
 import { cleanFtsSnippet, makeSnippet } from '../snippet';
 import { pairToolResults } from '../toolPairing';
+import { resolveSessionPaths } from '../paths';
 import { SessionRow, sessionMetaFromRow } from '../rebuild';
 
 export interface SearchResult {
@@ -82,7 +83,7 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
       .prepare(
         `
         SELECT
-          s.id, s.agent, s.cwd, s.file_path, s.display_path,
+          s.id, s.agent, s.cwd, s.file_path, s.display_path, s.rel_path,
           s.started_at, s.ended_at, s.rebuilt_at,
           m.seq AS seq,
           snippet(messages_fts, 0, '»', '«', '…', 12) AS snippet
@@ -106,20 +107,21 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
       }
 
       const adapter = adapterById.get(row.agent);
-      const resumeTemplate = adapter ? adapter.buildResumeTemplate(sessionMetaFromRow(row)) : null;
+      const paths = resolveSessionPaths(adapter, row);
+      const resumeTemplate = adapter ? adapter.buildResumeTemplate(sessionMetaFromRow(row, adapter)) : null;
 
       bySession.set(key, {
         agent: row.agent,
         sessionId: row.id,
         cwd: row.cwd,
-        filePath: row.display_path,
+        filePath: paths.displayPath,
         startedAt: row.started_at,
         endedAt: row.ended_at,
         matchCount: 1,
         bestSnippet: row.snippet,
         bestSeq: row.seq,
         bestKind: 'meta',
-        available: fs.existsSync(row.file_path),
+        available: fs.existsSync(paths.filePath),
         rebuiltAt: row.rebuilt_at,
         resumeTemplate,
         resumeCommand: adapter && resumeTemplate ? fillArgsSlot(resumeTemplate, adapter.resumeArgs) : null,

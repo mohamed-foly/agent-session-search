@@ -6,6 +6,7 @@ import { config } from './config';
 import { openDb } from './db';
 import { loadEnabledAdapters } from './adapters/registry';
 import { runFullScan } from './indexer';
+import { backfillRelPaths } from './paths';
 import { searchRouter } from './routes/search';
 import { sessionsRouter } from './routes/sessions';
 import { agentsRouter } from './routes/agents';
@@ -21,6 +22,12 @@ async function main(): Promise<void> {
     );
   } else {
     console.log(`[startup] Enabled adapters: ${adapters.map((a) => a.id).join(', ')}`);
+  }
+
+  // Rows from before rel_path existed: derive it from the stored absolute paths. Metadata only.
+  const backfill = backfillRelPaths(db, adapters);
+  if (backfill.filled > 0 || backfill.unresolved > 0) {
+    console.log(`[startup] Relative paths: filled ${backfill.filled}, could not derive ${backfill.unresolved}.`);
   }
 
   console.log('[startup] Running initial index scan...');
