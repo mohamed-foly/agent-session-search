@@ -43,12 +43,28 @@ export function openDb(): Database.Database {
     CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
       INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
     END;
+
+    -- Snapshot of a session's indexed messages taken before it is rebuilt, so
+    -- a later reindex of the (lossy) rebuilt file can't destroy the original
+    -- text. Not searched; only read back by future rebuilds.
+    CREATE TABLE IF NOT EXISTS messages_archive (
+      session_agent TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      role TEXT,
+      timestamp TEXT,
+      text TEXT NOT NULL,
+      PRIMARY KEY (session_agent, session_id, seq)
+    );
   `);
 
-  // Migration for indexes created before display_path existed.
+  // Migrations for indexes created before these columns existed.
   const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
   if (!columns.some((c) => c.name === 'display_path')) {
     db.exec("ALTER TABLE sessions ADD COLUMN display_path TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columns.some((c) => c.name === 'rebuilt_at')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN rebuilt_at TEXT');
   }
 
   return db;

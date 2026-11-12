@@ -1,6 +1,9 @@
+import fs from 'fs';
 import { Router } from 'express';
 import Database from 'better-sqlite3';
 import { AgentAdapter } from '../adapters/types';
+import { fillArgsSlot } from '../config';
+import { SessionRow, sessionMetaFromRow } from '../rebuild';
 
 export interface SearchResult {
   agent: string;
@@ -11,6 +14,12 @@ export interface SearchResult {
   endedAt: string | null;
   matchCount: number;
   bestSnippet: string;
+  /** Whether the transcript file exists, i.e. whether resuming will work. */
+  available: boolean;
+  rebuiltAt: string | null;
+  /** Resume command with a literal `{args}` slot, for clients that supply their own flags. */
+  resumeTemplate: string | null;
+  /** Resume command with the server's default args (from .env) filled in. */
   resumeCommand: string | null;
 }
 
@@ -71,13 +80,8 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
       .prepare(
         `
         SELECT
-          s.agent AS agent,
-          s.id AS sessionId,
-          s.cwd AS cwd,
-          s.file_path AS filePath,
-          s.display_path AS displayPath,
-          s.started_at AS startedAt,
-          s.ended_at AS endedAt,
+          s.id, s.agent, s.cwd, s.file_path, s.display_path,
+          s.started_at, s.ended_at, s.rebuilt_at,
           snippet(messages_fts, 0, '»', '«', '…', 12) AS snippet
         FROM messages_fts
         JOIN messages m ON m.rowid = messages_fts.rowid
@@ -87,20 +91,11 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
         LIMIT @maxRawMatches
         `
       )
-      .all({ ...params, maxRawMatches: MAX_RAW_MATCHES }) as Array<{
-      agent: string;
-      sessionId: string;
-      cwd: string | null;
-      filePath: string;
-      displayPath: string;
-      startedAt: string | null;
-      endedAt: string | null;
-      snippet: string;
-    }>;
+      .all({ ...params, maxRawMatches: MAX_RAW_MATCHES }) as Array<SessionRow & { snippet: string }>;
 
     const bySession = new Map<string, SearchResult>();
     for (const row of rawRows) {
-      const key = `${row.agent}:${row.sessionId}`;
+      const key = `${row.agent}:${row.id}`;
       const existing = bySession.get(key);
       if (existing) {
         existing.matchCount += 1;
@@ -108,28 +103,21 @@ export function searchRouter(db: Database.Database, adapters: AgentAdapter[]): R
       }
 
       const adapter = adapterById.get(row.agent);
-      const resumeCommand = adapter
-        ? adapter.buildResumeCommand({
-            sessionId: row.sessionId,
-            agent: row.agent,
-            cwd: row.cwd,
-            filePath: row.filePath,
-            displayPath: row.displayPath,
-            startedAt: row.startedAt,
-            endedAt: row.endedAt,
-          })
-        : null;
+      const resumeTemplate = adapter ? adapter.buildResumeTemplate(sessionMetaFromRow(row)) : null;
 
       bySession.set(key, {
         agent: row.agent,
-        sessionId: row.sessionId,
+        sessionId: row.id,
         cwd: row.cwd,
-        filePath: row.displayPath,
-        startedAt: row.startedAt,
-        endedAt: row.endedAt,
+        filePath: row.display_path,
+        startedAt: row.started_at,
+        endedAt: row.ended_at,
         matchCount: 1,
         bestSnippet: row.snippet,
-        resumeCommand,
+        available: fs.existsSync(row.file_path),
+        rebuiltAt: row.rebuilt_at,
+        resumeTemplate,
+        resumeCommand: adapter && resumeTemplate ? fillArgsSlot(resumeTemplate, adapter.resumeArgs) : null,
       });
     }
 

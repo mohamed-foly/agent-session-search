@@ -6,7 +6,12 @@ export function agentsRouter(adapters: AgentAdapter[]): Router {
 
   router.get('/agents', (_req, res) => {
     res.json({
-      agents: adapters.map((a) => ({ id: a.id, label: a.label })),
+      agents: adapters.map((a) => ({
+        id: a.id,
+        label: a.label,
+        defaultResumeArgs: a.resumeArgs,
+        canRebuild: typeof a.buildRebuiltTranscript === 'function',
+      })),
     });
   });
 

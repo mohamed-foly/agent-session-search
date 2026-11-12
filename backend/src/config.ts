@@ -37,6 +37,9 @@ export const config = {
       : null,
     resumeCommandTemplate:
       process.env.CLAUDE_CODE_RESUME_COMMAND ?? 'cd {cwd} && claude --resume {sessionId}',
+    // Extra CLI flags substituted for {args} in the resume command (or appended
+    // if the template has no {args}). The UI can override this per browser.
+    resumeArgs: (process.env.CLAUDE_CODE_RESUME_ARGS ?? '').trim(),
   },
   codex: {
     sessionsDir: expandHome(process.env.CODEX_SESSIONS_DIR ?? '~/.codex/sessions'),
@@ -45,6 +48,7 @@ export const config = {
       : null,
     resumeCommandTemplate:
       process.env.CODEX_RESUME_COMMAND ?? 'cd {cwd} && codex resume {sessionId}',
+    resumeArgs: (process.env.CODEX_RESUME_ARGS ?? '').trim(),
   },
 };
 
@@ -64,4 +68,24 @@ export function toDisplayPath(
 
 export function renderTemplate(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '');
+}
+
+/** Placeholder left in a rendered resume command where extra CLI args go. */
+export const ARGS_SLOT = '{args}';
+
+/**
+ * Renders a resume command template with session vars, keeping a literal
+ * `{args}` slot so callers (API or browser) can fill in their own extra flags.
+ * Templates without `{args}` get the slot appended at the end.
+ */
+export function renderResumeTemplate(template: string, vars: { sessionId: string; cwd: string }): string {
+  const withSlot = template.includes(ARGS_SLOT) ? template : `${template} ${ARGS_SLOT}`;
+  return renderTemplate(withSlot, { ...vars, args: ARGS_SLOT });
+}
+
+/** Fills the `{args}` slot left by renderResumeTemplate. */
+export function fillArgsSlot(resumeTemplate: string, args: string): string {
+  const trimmed = args.trim();
+  if (!trimmed) return resumeTemplate.replace(/ ?\{args\}/g, '');
+  return resumeTemplate.split(ARGS_SLOT).join(trimmed);
 }

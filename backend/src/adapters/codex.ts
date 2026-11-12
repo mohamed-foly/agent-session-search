@@ -1,7 +1,7 @@
 import fs from 'fs';
 import readline from 'readline';
 import path from 'path';
-import { config, renderTemplate, toDisplayPath } from '../config';
+import { config, renderResumeTemplate, toDisplayPath } from '../config';
 import { AgentAdapter, SessionMessage, SessionMeta } from './types';
 import { extractText } from './textExtract';
 
@@ -18,6 +18,8 @@ import { extractText } from './textExtract';
 export class CodexAdapter implements AgentAdapter {
   readonly id = 'codex';
   readonly label = 'Codex CLI';
+  readonly sessionsDir = config.codex.sessionsDir;
+  readonly resumeArgs = config.codex.resumeArgs;
 
   async isAvailable(): Promise<boolean> {
     return fs.existsSync(config.codex.sessionsDir);
@@ -115,8 +117,8 @@ export class CodexAdapter implements AgentAdapter {
     }
   }
 
-  buildResumeCommand(session: SessionMeta): string {
-    return renderTemplate(config.codex.resumeCommandTemplate, {
+  buildResumeTemplate(session: SessionMeta): string {
+    return renderResumeTemplate(config.codex.resumeCommandTemplate, {
       sessionId: session.sessionId,
       cwd: session.cwd ?? '.',
     });

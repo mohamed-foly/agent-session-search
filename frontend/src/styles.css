@@ -7,6 +7,8 @@
   --accent: #4f46e5;
   --accent-contrast: #ffffff;
   --mark-bg: #fde68a;
+  --ok: #15803d;
+  --danger: #b91c1c;
   color-scheme: light;
 }
 
@@ -20,6 +22,8 @@
     --accent: #818cf8;
     --accent-contrast: #14142b;
     --mark-bg: #7c5e00;
+    --ok: #4ade80;
+    --danger: #f87171;
     color-scheme: dark;
   }
 }
@@ -206,4 +210,126 @@ body {
   overflow-x: auto;
   white-space: nowrap;
   font-size: 0.8rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.reindex-btn:disabled,
+.copy-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.primary-btn {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--accent-contrast);
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.settings-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.settings-panel h2 {
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+
+.settings-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.settings-row label {
+  font-size: 0.85rem;
+  min-width: 7rem;
+}
+
+.settings-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+.status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.status-ok {
+  color: var(--ok);
+}
+
+.status-missing {
+  color: var(--danger);
+}
+
+.result-actions-unavailable code {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.result-unavailable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.rebuild-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.rebuild-panel {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+}
+
+.rebuild-panel p,
+.rebuild-panel ul {
+  margin: 0 0 0.5rem;
+}
+
+.rebuild-actions {
+  display: flex;
+  gap: 0.5rem;
 }

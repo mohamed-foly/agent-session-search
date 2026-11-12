@@ -1,9 +1,10 @@
 import fs from 'fs';
 import readline from 'readline';
 import path from 'path';
-import { config, renderTemplate, toDisplayPath } from '../config';
-import { AgentAdapter, SessionMessage, SessionMeta } from './types';
+import { config, renderResumeTemplate, toDisplayPath } from '../config';
+import { AgentAdapter, IndexedMessage, RebuiltTranscript, SessionMessage, SessionMeta } from './types';
 import { extractText } from './textExtract';
+import { REBUILT_LINE_FLAG, buildClaudeCodeTranscript } from './claudeCodeRebuild';
 
 /**
  * Claude Code stores one directory per working-directory under
@@ -13,6 +14,8 @@ import { extractText } from './textExtract';
 export class ClaudeCodeAdapter implements AgentAdapter {
   readonly id = 'claude-code';
   readonly label = 'Claude Code';
+  readonly sessionsDir = config.claudeCode.sessionsDir;
+  readonly resumeArgs = config.claudeCode.resumeArgs;
 
   async isAvailable(): Promise<boolean> {
     return fs.existsSync(config.claudeCode.sessionsDir);
@@ -81,6 +84,10 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         continue;
       }
 
+      // Lines written by a rebuild duplicate text the indexer restores from
+      // its archive instead (see indexer.ts / claudeCodeRebuild.ts).
+      if (obj?.[REBUILT_LINE_FLAG] === true) continue;
+
       const role: string = obj?.message?.role ?? obj?.type ?? 'unknown';
       const text = extractText(obj?.message?.content ?? obj?.toolUseResult ?? obj);
       if (!text) continue;
@@ -93,10 +100,14 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     }
   }
 
-  buildResumeCommand(session: SessionMeta): string {
-    return renderTemplate(config.claudeCode.resumeCommandTemplate, {
+  buildResumeTemplate(session: SessionMeta): string {
+    return renderResumeTemplate(config.claudeCode.resumeCommandTemplate, {
       sessionId: session.sessionId,
       cwd: session.cwd ?? '.',
     });
+  }
+
+  buildRebuiltTranscript(session: SessionMeta, messages: IndexedMessage[]): RebuiltTranscript {
+    return buildClaudeCodeTranscript(session, messages);
   }
 }

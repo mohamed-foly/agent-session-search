@@ -55,6 +55,30 @@ The container runs as a non-root user matching your host UID/GID (defaults to 10
 
 Open the URL printed on startup (default `http://localhost:4173`).
 
+## Resume commands and extra flags
+
+Each result shows the command to re-enter that session, built from the agent's `*_RESUME_COMMAND` template. To add your own flags (for example `--dangerously-skip-permissions --teammate-mode in-process` for Claude Code), either:
+
+- set a server-wide default per agent in `.env`: `CLAUDE_CODE_RESUME_ARGS=...`, `CODEX_RESUME_ARGS=...`; or
+- open **Settings** in the UI and type flags per agent. This is saved in that browser and overrides the `.env` default. **Reset** returns to the default.
+
+The flags go wherever the template has `{args}`, or at the end when it has none.
+
+## Missing sessions and rebuilding
+
+Every result shows whether its transcript file still exists. If an agent's file is gone (deleted, cleaned up, lost in a move), resuming fails with `No conversation found with session ID`. The index still holds the session's text, so the result is flagged **Transcript missing**.
+
+For Claude Code, **Rebuild conversation…** writes a new transcript to the original path from the indexed text, so `claude --resume <id>` works again. It first runs a dry-run check and shows why a session can't be rebuilt if it can't. The requirements are:
+
+- the original file is missing (the tool never overwrites; files are created exclusively);
+- the target path is inside the configured sessions directory, and that directory is writable (in Docker, set `CLAUDE_CODE_SESSIONS_MOUNT_MODE=rw`);
+- the session's working directory is known;
+- the index holds at least one user prompt and one assistant reply.
+
+The result is **lossy**: the index keeps flattened text only, so the rebuilt session is a plain-text conversation. Real prompts stay user turns. Replies, tool calls and truncated tool output are folded into assistant turns. Thinking and file checkpoints are gone.
+
+Before writing, the indexed messages are copied to a `messages_archive` table, and every rebuilt line is marked `"rebuiltFromIndex": true`. When you resume and continue the session, the indexer skips the marked lines and puts the archived original text back ahead of the new turns. The index never degrades to the lossy copy, and a later rebuild includes everything. The same is available over the API: `GET /api/sessions/:agent/:id/rebuild` (dry run) and `POST` (perform). The POST refuses cross-origin browser requests.
+
 ## Reindexing
 
 The indexer does an initial full scan on startup, then re-scans on an interval (`REINDEX_INTERVAL_SECONDS` in `.env`). You can also trigger it manually:

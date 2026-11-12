@@ -1,7 +1,8 @@
 # Host paths to your agents' session directories are kept out of the image
 # and out of the app's own .env — set them here (or override via a
 # docker-compose .env in this same directory) so the repo stays generic.
-# Mounted read-only: this tool only ever reads session files, never writes them.
+# Mounted read-only by default: the tool only reads session files, unless you
+# opt in to rebuilding missing Claude Code sessions (see .env.example).
 
 services:
   agent-session-search:
@@ -30,10 +31,14 @@ services:
       CODEX_HOST_SESSIONS_DIR: ${CODEX_HOST_DIR:-${HOME}/.codex/sessions}
       CLAUDE_CODE_RESUME_COMMAND: ${CLAUDE_CODE_RESUME_COMMAND:-cd {cwd} && claude --resume {sessionId}}
       CODEX_RESUME_COMMAND: ${CODEX_RESUME_COMMAND:-cd {cwd} && codex resume {sessionId}}
+      CLAUDE_CODE_RESUME_ARGS: ${CLAUDE_CODE_RESUME_ARGS:-}
+      CODEX_RESUME_ARGS: ${CODEX_RESUME_ARGS:-}
     volumes:
       - ./data:/data
       # NOTE: "~" does not expand inside Docker bind-mount paths — use ${HOME}
       # (passed through from the host shell) or set an absolute path in a
       # compose-level .env file in this directory.
-      - ${CLAUDE_CODE_HOST_DIR:-${HOME}/.claude/projects}:/sessions/claude-code:ro
+      # Read-only unless CLAUDE_CODE_SESSIONS_MOUNT_MODE=rw, which "Rebuild
+      # conversation" needs to write recovered transcripts (create-only).
+      - ${CLAUDE_CODE_HOST_DIR:-${HOME}/.claude/projects}:/sessions/claude-code:${CLAUDE_CODE_SESSIONS_MOUNT_MODE:-ro}
       - ${CODEX_HOST_DIR:-${HOME}/.codex/sessions}:/sessions/codex:ro

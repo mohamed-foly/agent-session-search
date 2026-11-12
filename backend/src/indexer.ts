@@ -41,6 +41,9 @@ export async function runFullScan(db: Database.Database, adapters: AgentAdapter[
     INSERT INTO messages (session_agent, session_id, seq, role, timestamp, text)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
+  const selectArchived = db.prepare(
+    'SELECT role, timestamp, text FROM messages_archive WHERE session_agent = ? AND session_id = ? ORDER BY seq'
+  );
 
   for (const adapter of adapters) {
     for await (const session of adapter.listSessions()) {
@@ -75,7 +78,19 @@ export async function runFullScan(db: Database.Database, adapters: AgentAdapter[
       });
       reindexOne();
 
+      // A rebuilt session's file holds only a lossy copy of its history (which
+      // adapters skip); restore the archived original text ahead of any real
+      // turns appended since, so search keeps matching it.
+      const archived = selectArchived.all(session.agent, session.sessionId) as Array<{
+        role: string | null;
+        timestamp: string | null;
+        text: string;
+      }>;
       let seq = 0;
+      for (const message of archived) {
+        insertMessage.run(session.agent, session.sessionId, seq++, message.role, message.timestamp, message.text);
+      }
+
       for await (const message of adapter.readMessages(session)) {
         insertMessage.run(
           session.agent,
