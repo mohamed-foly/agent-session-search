@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     `[startup] Indexed ${initialStats.sessionsReindexed} session(s) (of ${initialStats.sessionsSeen} seen).`
   );
 
-  setInterval(async () => {
+  const reindexTimer = setInterval(async () => {
     try {
       const stats = await runFullScan(db, adapters);
       if (stats.sessionsReindexed > 0) {
@@ -59,9 +59,22 @@ async function main(): Promise<void> {
     });
   }
 
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     console.log(`[startup] Agent Session Search listening on http://localhost:${config.port}`);
   });
+
+  // Node as a container's PID 1 ignores SIGTERM unless handled, so without this
+  // `docker stop` waits 10s and SIGKILLs. Every index write is one synchronous
+  // transaction, so closing the DB between events can never cut one in half.
+  const shutdown = (signal: string) => {
+    console.log(`[shutdown] ${signal} received, closing.`);
+    clearInterval(reindexTimer);
+    server.close();
+    db.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 main().catch((err) => {

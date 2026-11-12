@@ -1,6 +1,6 @@
 import fs from 'fs';
 import Database from 'better-sqlite3';
-import { AgentAdapter } from './adapters/types';
+import { AgentAdapter, SessionMessage } from './adapters/types';
 
 export interface IndexStats {
   agentsScanned: number;
@@ -10,12 +10,28 @@ export interface IndexStats {
   finishedAt: string;
 }
 
+let inFlight: Promise<IndexStats> | null = null;
+
 /**
  * Full scan: for every session every adapter can see, reindex it if the
  * underlying file has changed since we last indexed it (or if we've never
  * seen it before). Cheap no-op on repeat runs once everything is caught up.
+ *
+ * Only one scan runs at a time: a scan awaits file reads, so two overlapping
+ * scans (the interval timer plus a manual reindex, or a slow scan) would
+ * interleave on the same session and collide on messages' primary key. A
+ * caller that arrives mid-scan shares the running scan's result.
  */
-export async function runFullScan(db: Database.Database, adapters: AgentAdapter[]): Promise<IndexStats> {
+export function runFullScan(db: Database.Database, adapters: AgentAdapter[]): Promise<IndexStats> {
+  if (!inFlight) {
+    inFlight = scan(db, adapters).finally(() => {
+      inFlight = null;
+    });
+  }
+  return inFlight;
+}
+
+async function scan(db: Database.Database, adapters: AgentAdapter[]): Promise<IndexStats> {
   const startedAt = new Date().toISOString();
   let sessionsSeen = 0;
   let sessionsReindexed = 0;
@@ -63,7 +79,21 @@ export async function runFullScan(db: Database.Database, adapters: AgentAdapter[
         continue; // unchanged since last index
       }
 
-      const reindexOne = db.transaction(() => {
+      // Read the whole session BEFORE touching the index. If reading fails
+      // (or the process dies) the previously indexed rows and mtime stay
+      // exactly as they were, and the session is retried on the next scan.
+      const messages: SessionMessage[] = [];
+      try {
+        for await (const message of adapter.readMessages(session)) messages.push(message);
+      } catch (err) {
+        // One unreadable session must not stop the rest from being indexed.
+        console.error(`[index] Could not read ${session.agent}/${session.sessionId}, keeping its existing index:`, err);
+        continue;
+      }
+
+      // Replace the session's rows in ONE transaction: never a window where
+      // the old text is deleted but the new text isn't fully in place.
+      db.transaction(() => {
         deleteMessages.run(session.agent, session.sessionId);
         upsertSession.run({
           id: session.sessionId,
@@ -75,32 +105,23 @@ export async function runFullScan(db: Database.Database, adapters: AgentAdapter[
           endedAt: session.endedAt,
           mtimeMs,
         });
-      });
-      reindexOne();
 
-      // A rebuilt session's file holds only a lossy copy of its history (which
-      // adapters skip); restore the archived original text ahead of any real
-      // turns appended since, so search keeps matching it.
-      const archived = selectArchived.all(session.agent, session.sessionId) as Array<{
-        role: string | null;
-        timestamp: string | null;
-        text: string;
-      }>;
-      let seq = 0;
-      for (const message of archived) {
-        insertMessage.run(session.agent, session.sessionId, seq++, message.role, message.timestamp, message.text);
-      }
-
-      for await (const message of adapter.readMessages(session)) {
-        insertMessage.run(
-          session.agent,
-          session.sessionId,
-          seq++,
-          message.role,
-          message.timestamp,
-          message.text
-        );
-      }
+        // A rebuilt session's file holds only a lossy copy of its history (which
+        // adapters skip); restore the archived original text ahead of any real
+        // turns appended since, so search keeps matching it.
+        const archived = selectArchived.all(session.agent, session.sessionId) as Array<{
+          role: string | null;
+          timestamp: string | null;
+          text: string;
+        }>;
+        let seq = 0;
+        for (const message of archived) {
+          insertMessage.run(session.agent, session.sessionId, seq++, message.role, message.timestamp, message.text);
+        }
+        for (const message of messages) {
+          insertMessage.run(session.agent, session.sessionId, seq++, message.role, message.timestamp, message.text);
+        }
+      })();
 
       sessionsReindexed += 1;
     }
