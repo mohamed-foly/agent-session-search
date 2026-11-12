@@ -33,7 +33,7 @@ Implement `AgentAdapter` (see `backend/src/adapters/types.ts`) in a new file und
 3. How to stream normalized messages `{ role, text, timestamp }` out of one session file.
 4. How to build the shell command that resumes that session.
 
-Nothing else in the codebase needs to change.
+Nothing else in the codebase needs to change. The UI shows a neutral icon for an agent it has no logo for; to give yours one, add an SVG under `frontend/src/assets/icons/` (and list it in the `NOTICE.md` there) and one line in `frontend/src/agentIcons.ts`.
 
 ## Setup
 
