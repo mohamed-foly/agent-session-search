@@ -1,6 +1,16 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import os from 'os';
 import path from 'path';
+
+/**
+ * The repo root (backend/src or backend/dist is two levels below it). Settings
+ * and the default index live there no matter which directory the process was
+ * started from: `npm run dev:backend` runs from backend/, and without this it
+ * would ignore the root .env and open a stray backend/data/ index.
+ */
+const repoRoot = path.resolve(__dirname, '..', '..');
+dotenv.config({ path: path.join(repoRoot, '.env') });
+dotenv.config(); // also honour a .env in the working directory (never overrides the above)
 
 /** Expands a leading "~" to the current user's home directory. */
 export function expandHome(p: string): string {
@@ -31,7 +41,8 @@ export const config = {
    * connection, so "delete" costs nothing here.
    */
   indexJournalMode: journalMode as 'wal' | 'delete',
-  indexDbPath: expandHome(process.env.INDEX_DB_PATH ?? './data/index.sqlite3'),
+  // A relative path is relative to the repo root, not the working directory.
+  indexDbPath: path.resolve(repoRoot, expandHome(process.env.INDEX_DB_PATH ?? './data/index.sqlite3')),
   reindexIntervalSeconds: Number(process.env.REINDEX_INTERVAL_SECONDS ?? 120),
   enabledAgents: required('ENABLED_AGENTS', 'claude-code,codex')
     .split(',')
