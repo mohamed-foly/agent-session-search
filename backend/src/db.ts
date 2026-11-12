@@ -6,7 +6,19 @@ import { config } from './config';
 export function openDb(): Database.Database {
   fs.mkdirSync(path.dirname(config.indexDbPath), { recursive: true });
   const db = new Database(config.indexDbPath);
-  db.pragma('journal_mode = WAL');
+  // Converting an existing database needs every other connection closed. SQLite
+  // reports the mode it actually ended up in; fail loudly rather than carry on
+  // silently in the wrong one (WAL on an unsafe mount is what we're avoiding).
+  const mode = String(db.pragma(`journal_mode = ${config.indexJournalMode}`, { simple: true })).toLowerCase();
+  if (mode !== config.indexJournalMode) {
+    throw new Error(
+      `Could not switch the index to journal_mode=${config.indexJournalMode} (still "${mode}"). ` +
+        'Another process probably has the database open; stop it and retry.'
+    );
+  }
+  // The index holds data that can't be recreated: favour durability over speed.
+  // Writes are batched per session, so the extra syncs are cheap.
+  db.pragma('synchronous = FULL');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (

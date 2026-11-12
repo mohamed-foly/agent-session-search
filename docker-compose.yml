@@ -21,6 +21,10 @@ services:
     environment:
       PORT: 4173
       INDEX_DB_PATH: /data/index.sqlite3
+      # Docker Desktop shares ./data into its VM through a file-sharing layer
+      # that can't be trusted with SQLite's WAL shared memory, so use the
+      # rollback journal. On native Docker Engine you can set this to wal.
+      INDEX_JOURNAL_MODE: ${INDEX_JOURNAL_MODE:-delete}
       REINDEX_INTERVAL_SECONDS: ${REINDEX_INTERVAL_SECONDS:-120}
       ENABLED_AGENTS: ${ENABLED_AGENTS:-claude-code,codex}
       CLAUDE_CODE_SESSIONS_DIR: /sessions/claude-code

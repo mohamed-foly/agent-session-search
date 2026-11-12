@@ -17,8 +17,20 @@ function required(name: string, fallback?: string): string {
   return value;
 }
 
+const journalMode = (process.env.INDEX_JOURNAL_MODE ?? 'wal').trim().toLowerCase();
+if (journalMode !== 'wal' && journalMode !== 'delete') {
+  throw new Error(`INDEX_JOURNAL_MODE must be "wal" or "delete", got "${journalMode}"`);
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 4173),
+  /**
+   * SQLite journal mode for the index. "wal" is fastest but needs shared memory
+   * that file-sharing layers (Docker Desktop bind mounts) don't provide
+   * reliably; "delete" (rollback journal) avoids that. The server uses one
+   * connection, so "delete" costs nothing here.
+   */
+  indexJournalMode: journalMode as 'wal' | 'delete',
   indexDbPath: expandHome(process.env.INDEX_DB_PATH ?? './data/index.sqlite3'),
   reindexIntervalSeconds: Number(process.env.REINDEX_INTERVAL_SECONDS ?? 120),
   enabledAgents: required('ENABLED_AGENTS', 'claude-code,codex')
