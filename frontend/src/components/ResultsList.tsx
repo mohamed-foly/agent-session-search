@@ -1,26 +1,31 @@
 import { useState } from 'react';
 import { Agent, RebuildCheck, SearchResult, checkRebuild, fillArgsSlot, rebuildSession } from '../api';
 import { ResumeArgsOverrides } from '../settings';
+import { Snippet } from '../highlight';
+import AgentBadge from './AgentBadge';
+import CopyIconButton from './CopyIconButton';
+import MaskIcon from './MaskIcon';
+import openIcon from '../assets/icons/message-square-text.svg';
+
+/** What kind of message a result's snippet came from, in words. */
+function matchLabel(r: SearchResult): string {
+  switch (r.bestKind) {
+    case 'user':
+      return 'You';
+    case 'assistant':
+      return 'Assistant';
+    case 'tool_call':
+      return r.bestToolName ? `${r.bestToolName} call` : 'Tool call';
+    case 'tool_result':
+      return r.bestToolName ? `${r.bestToolName} result` : 'Tool result';
+    default:
+      return r.bestRole?.startsWith('subagent:') ? 'Subagent' : 'System record';
+  }
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString();
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      className="copy-btn"
-      onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied ? 'Copied!' : 'Copy resume command'}
-    </button>
-  );
 }
 
 type RebuildState =
@@ -113,9 +118,11 @@ interface Props {
   agents: Agent[];
   resumeArgs: ResumeArgsOverrides;
   onRebuilt: (result: SearchResult, rebuiltAt: string) => void;
+  /** Open the conversation viewer on a result's best match. */
+  onOpen: (result: SearchResult, seq: number, trigger: HTMLElement | null) => void;
 }
 
-export default function ResultsList({ results, agents, resumeArgs, onRebuilt }: Props) {
+export default function ResultsList({ results, agents, resumeArgs, onRebuilt, onOpen }: Props) {
   if (results.length === 0) {
     return <div className="empty-state">No matching sessions yet — try a different query.</div>;
   }
@@ -132,7 +139,7 @@ export default function ResultsList({ results, agents, resumeArgs, onRebuilt }: 
         return (
           <li key={`${r.agent}:${r.sessionId}`} className="result-card">
             <div className="result-header">
-              <span className={`badge badge-${r.agent}`}>{r.agent}</span>
+              <AgentBadge agentId={r.agent} label={agent?.label ?? r.agent} />
               <span className="result-cwd" title={r.cwd ?? undefined}>
                 {r.cwd ?? 'unknown directory'}
               </span>
@@ -149,26 +156,42 @@ export default function ResultsList({ results, agents, resumeArgs, onRebuilt }: 
                 </span>
               )}
               <span className="result-count">{r.matchCount} match{r.matchCount === 1 ? '' : 'es'}</span>
+              {command && (
+                <CopyIconButton
+                  text={command}
+                  label="Copy resume command"
+                  tip={`Copy resume command${r.available ? '' : ' (transcript missing, so it will fail)'}: ${command}`}
+                />
+              )}
+              <button
+                type="button"
+                className="icon-btn has-tip"
+                data-tip="Open conversation"
+                data-tip-align="end"
+                aria-label={`Open conversation, ${agent?.label ?? r.agent} session ${r.sessionId.slice(0, 8)}`}
+                onClick={(e) => onOpen(r, r.bestSeq, e.currentTarget)}
+              >
+                <MaskIcon src={openIcon} />
+              </button>
             </div>
 
-            <p
-              className="result-snippet"
-              dangerouslySetInnerHTML={{
-                __html: r.bestSnippet.replace(/»/g, '<mark>').replace(/«/g, '</mark>'),
-              }}
-            />
+            {/* Mouse shortcut only: keyboard and screen-reader users have the "Open conversation" button. */}
+            <p className="result-snippet" onClick={(e) => onOpen(r, r.bestSeq, e.currentTarget)}>
+              <span
+                className={`match-kind match-kind-${r.bestKind}${r.bestKind === 'tool_call' || r.bestKind === 'tool_result' ? ' has-tip' : ''}`}
+                data-tip={r.bestToolCallId ? `Tool call id: ${r.bestToolCallId}` : undefined}
+                data-tip-wide=""
+                data-tip-align="start"
+              >
+                {matchLabel(r)}
+              </span>
+              <Snippet value={r.bestSnippet} />
+            </p>
 
             <div className="result-meta">
               <span>{formatDate(r.startedAt)} → {formatDate(r.endedAt)}</span>
               <span className="result-path" title={r.filePath}>{r.sessionId}</span>
             </div>
-
-            {command && (
-              <div className={`result-actions${r.available ? '' : ' result-actions-unavailable'}`}>
-                <code>{command}</code>
-                <CopyButton text={command} />
-              </div>
-            )}
 
             {!r.available && (
               <div className="result-unavailable">
